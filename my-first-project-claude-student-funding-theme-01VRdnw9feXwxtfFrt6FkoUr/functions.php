@@ -748,3 +748,160 @@ add_action('admin_enqueue_scripts', 'student_funding_admin_scripts');
 
 // サンプルデータ作成機能を読み込む
 require_once get_template_directory() . '/sample-data.php';
+
+// ===================================
+// 9. 会員登録・ログイン機能
+// ===================================
+
+/**
+ * 会員登録処理
+ */
+function student_funding_register_user() {
+    // ノンス検証
+    check_ajax_referer('user_register', 'nonce');
+
+    // データの取得
+    $username = sanitize_user($_POST['username']);
+    $email = sanitize_email($_POST['email']);
+    $password = $_POST['password'];
+    $password_confirm = $_POST['password_confirm'];
+    $display_name = sanitize_text_field($_POST['display_name']);
+
+    // バリデーション
+    $errors = array();
+
+    // ユーザー名チェック
+    if (empty($username)) {
+        $errors[] = 'ユーザー名を入力してください。';
+    } elseif (username_exists($username)) {
+        $errors[] = 'このユーザー名は既に使用されています。';
+    } elseif (!validate_username($username)) {
+        $errors[] = 'ユーザー名に使用できない文字が含まれています。';
+    }
+
+    // メールアドレスチェック
+    if (empty($email)) {
+        $errors[] = 'メールアドレスを入力してください。';
+    } elseif (!is_email($email)) {
+        $errors[] = '有効なメールアドレスを入力してください。';
+    } elseif (email_exists($email)) {
+        $errors[] = 'このメールアドレスは既に登録されています。';
+    }
+
+    // パスワードチェック
+    if (empty($password)) {
+        $errors[] = 'パスワードを入力してください。';
+    } elseif (strlen($password) < 8) {
+        $errors[] = 'パスワードは8文字以上で入力してください。';
+    }
+
+    if ($password !== $password_confirm) {
+        $errors[] = 'パスワードが一致しません。';
+    }
+
+    // 表示名チェック
+    if (empty($display_name)) {
+        $errors[] = '表示名を入力してください。';
+    }
+
+    // エラーがある場合
+    if (!empty($errors)) {
+        wp_send_json_error(array('message' => implode('<br>', $errors)));
+        return;
+    }
+
+    // ユーザー作成
+    $user_id = wp_create_user($username, $password, $email);
+
+    if (is_wp_error($user_id)) {
+        wp_send_json_error(array('message' => $user_id->get_error_message()));
+        return;
+    }
+
+    // 表示名を更新
+    wp_update_user(array(
+        'ID' => $user_id,
+        'display_name' => $display_name
+    ));
+
+    // 成功
+    wp_send_json_success(array(
+        'message' => '会員登録が完了しました。',
+        'redirect' => home_url('/login/?registered=success')
+    ));
+}
+add_action('wp_ajax_nopriv_register_user', 'student_funding_register_user');
+
+/**
+ * ログイン処理
+ */
+function student_funding_login_user() {
+    // ノンス検証
+    check_ajax_referer('user_login', 'nonce');
+
+    // データの取得
+    $username = sanitize_text_field($_POST['username']);
+    $password = $_POST['password'];
+    $remember = isset($_POST['remember']) ? true : false;
+
+    // ログイン試行
+    $creds = array(
+        'user_login'    => $username,
+        'user_password' => $password,
+        'remember'      => $remember
+    );
+
+    $user = wp_signon($creds, false);
+
+    if (is_wp_error($user)) {
+        wp_send_json_error(array('message' => 'ユーザー名またはパスワードが正しくありません。'));
+        return;
+    }
+
+    // 成功
+    wp_send_json_success(array(
+        'message' => 'ログインしました。',
+        'redirect' => home_url('/my-page/')
+    ));
+}
+add_action('wp_ajax_nopriv_login_user', 'student_funding_login_user');
+
+/**
+ * お気に入り追加/削除
+ */
+function student_funding_toggle_favorite() {
+    check_ajax_referer('student_funding_nonce', 'nonce');
+
+    if (!is_user_logged_in()) {
+        wp_send_json_error(array('message' => 'ログインが必要です。'));
+        return;
+    }
+
+    $project_id = intval($_POST['project_id']);
+    $user_id = get_current_user_id();
+
+    $favorites = get_user_meta($user_id, 'favorite_projects', true);
+    if (!is_array($favorites)) {
+        $favorites = array();
+    }
+
+    $is_favorite = in_array($project_id, $favorites);
+
+    if ($is_favorite) {
+        // 削除
+        $favorites = array_diff($favorites, array($project_id));
+        $action = 'removed';
+    } else {
+        // 追加
+        $favorites[] = $project_id;
+        $action = 'added';
+    }
+
+    update_user_meta($user_id, 'favorite_projects', $favorites);
+
+    wp_send_json_success(array(
+        'action' => $action,
+        'is_favorite' => !$is_favorite
+    ));
+}
+add_action('wp_ajax_toggle_favorite', 'student_funding_toggle_favorite');

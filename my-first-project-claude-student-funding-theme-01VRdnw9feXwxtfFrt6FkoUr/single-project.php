@@ -50,6 +50,19 @@ while (have_posts()) : the_post();
                         <span class="copy-icon">🔗</span>
                         <span class="copy-text">シェア</span>
                     </button>
+
+                    <!-- お気に入りボタン -->
+                    <?php if (is_user_logged_in()) :
+                        $user_id = get_current_user_id();
+                        $favorites = get_user_meta($user_id, 'favorite_projects', true);
+                        $is_favorite = is_array($favorites) && in_array(get_the_ID(), $favorites);
+                    ?>
+                        <button class="favorite-btn<?php echo $is_favorite ? ' favorited' : ''; ?>"
+                                data-project-id="<?php echo get_the_ID(); ?>"
+                                title="お気に入りに追加">
+                            <?php echo $is_favorite ? '★ お気に入り登録済み' : '☆ お気に入りに追加'; ?>
+                        </button>
+                    <?php endif; ?>
                 </div>
 
                 <h1 class="project-title"><?php the_title(); ?></h1>

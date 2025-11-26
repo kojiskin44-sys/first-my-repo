@@ -27,6 +27,18 @@
 
         // リンクコピー機能
         initCopyLink();
+
+        // 会員登録フォーム
+        initRegisterForm();
+
+        // ログインフォーム
+        initLoginForm();
+
+        // マイページタブ
+        initMyPageTabs();
+
+        // お気に入りボタン
+        initFavoriteButtons();
     });
 
     // ===================================
@@ -379,6 +391,173 @@
         }
 
         document.body.removeChild(textArea);
+    }
+
+    // ===================================
+    // 12. 会員登録フォーム
+    // ===================================
+
+    function initRegisterForm() {
+        var $form = $('#register-form');
+        if ($form.length === 0) return;
+
+        var $errorDiv = $('#register-error');
+        var $submitButton = $form.find('button[type="submit"]');
+
+        $form.on('submit', function(e) {
+            e.preventDefault();
+
+            // エラーメッセージをクリア
+            $errorDiv.hide().html('');
+
+            // パスワード一致チェック
+            var password = $form.find('#password').val();
+            var passwordConfirm = $form.find('#password_confirm').val();
+
+            if (password !== passwordConfirm) {
+                $errorDiv.html('パスワードが一致しません。').show();
+                return false;
+            }
+
+            // 送信ボタンを無効化
+            var originalText = $submitButton.text();
+            $submitButton.prop('disabled', true).text('登録中...');
+
+            // フォームデータを取得
+            var formData = {
+                action: 'register_user',
+                nonce: $form.find('[name="register_nonce"]').val(),
+                username: $form.find('[name="username"]').val(),
+                email: $form.find('[name="email"]').val(),
+                password: password,
+                password_confirm: passwordConfirm,
+                display_name: $form.find('[name="display_name"]').val()
+            };
+
+            // AJAX送信
+            $.ajax({
+                url: studentFunding.ajaxurl,
+                type: 'POST',
+                data: formData,
+                success: function(response) {
+                    if (response.success) {
+                        window.location.href = response.data.redirect;
+                    } else {
+                        $errorDiv.html(response.data.message).show();
+                        $submitButton.prop('disabled', false).text(originalText);
+                    }
+                },
+                error: function() {
+                    $errorDiv.html('通信エラーが発生しました。').show();
+                    $submitButton.prop('disabled', false).text(originalText);
+                }
+            });
+        });
+    }
+
+    // ===================================
+    // 13. ログインフォーム
+    // ===================================
+
+    function initLoginForm() {
+        var $form = $('#login-form');
+        if ($form.length === 0) return;
+
+        var $errorDiv = $('#login-error');
+        var $submitButton = $form.find('button[type="submit"]');
+
+        $form.on('submit', function(e) {
+            e.preventDefault();
+
+            // エラーメッセージをクリア
+            $errorDiv.hide().html('');
+
+            // 送信ボタンを無効化
+            var originalText = $submitButton.text();
+            $submitButton.prop('disabled', true).text('ログイン中...');
+
+            // フォームデータを取得
+            var formData = {
+                action: 'login_user',
+                nonce: $form.find('[name="login_nonce"]').val(),
+                username: $form.find('[name="username"]').val(),
+                password: $form.find('[name="password"]').val(),
+                remember: $form.find('[name="remember"]').is(':checked') ? 1 : 0
+            };
+
+            // AJAX送信
+            $.ajax({
+                url: studentFunding.ajaxurl,
+                type: 'POST',
+                data: formData,
+                success: function(response) {
+                    if (response.success) {
+                        window.location.href = response.data.redirect;
+                    } else {
+                        $errorDiv.html(response.data.message).show();
+                        $submitButton.prop('disabled', false).text(originalText);
+                    }
+                },
+                error: function() {
+                    $errorDiv.html('通信エラーが発生しました。').show();
+                    $submitButton.prop('disabled', false).text(originalText);
+                }
+            });
+        });
+    }
+
+    // ===================================
+    // 14. マイページのタブ切り替え
+    // ===================================
+
+    function initMyPageTabs() {
+        $('.tab-btn').on('click', function() {
+            var tabId = $(this).data('tab');
+
+            // タブボタンのアクティブ状態を切り替え
+            $('.tab-btn').removeClass('active');
+            $(this).addClass('active');
+
+            // タブコンテンツの表示を切り替え
+            $('.tab-content').removeClass('active');
+            $('#' + tabId + '-tab').addClass('active');
+        });
+    }
+
+    // ===================================
+    // 15. お気に入りボタン
+    // ===================================
+
+    function initFavoriteButtons() {
+        $(document).on('click', '.favorite-btn', function(e) {
+            e.preventDefault();
+            var $btn = $(this);
+            var projectId = $btn.data('project-id');
+
+            $.ajax({
+                url: studentFunding.ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'toggle_favorite',
+                    nonce: studentFunding.nonce,
+                    project_id: projectId
+                },
+                success: function(response) {
+                    if (response.success) {
+                        if (response.data.is_favorite) {
+                            $btn.addClass('favorited').html('★ お気に入り登録済み');
+                        } else {
+                            $btn.removeClass('favorited').html('☆ お気に入りに追加');
+                        }
+                    } else {
+                        alert(response.data.message);
+                    }
+                },
+                error: function() {
+                    alert('エラーが発生しました。');
+                }
+            });
+        });
     }
 
 })(jQuery);
