@@ -25,6 +25,9 @@
         // モバイルメニュー
         initMobileMenu();
 
+        // ユーザードロップダウンメニュー
+        initUserMenu();
+
         // リンクコピー機能
         initCopyLink();
 
@@ -242,6 +245,43 @@
                 $menuWrapper.removeClass('active');
                 $menuToggle.removeClass('active').attr('aria-expanded', 'false');
             }
+        });
+    }
+
+    // ===================================
+    // 5.5. ユーザードロップダウンメニュー
+    // ===================================
+
+    function initUserMenu() {
+        var $userMenuContainer = $('.user-menu-container');
+        var $userMenuButton = $('.user-menu-button');
+
+        if ($userMenuContainer.length === 0) return;
+
+        // ユーザーメニューボタンのクリック
+        $userMenuButton.on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            $userMenuContainer.toggleClass('active');
+        });
+
+        // メニュー外をクリックしたら閉じる
+        $(document).on('click', function(e) {
+            if (!$(e.target).closest('.user-menu-container').length) {
+                $userMenuContainer.removeClass('active');
+            }
+        });
+
+        // Escキーで閉じる
+        $(document).on('keydown', function(e) {
+            if (e.key === 'Escape' || e.keyCode === 27) {
+                $userMenuContainer.removeClass('active');
+            }
+        });
+
+        // ドロップダウンメニュー内のリンクをクリックしたらメニューを閉じる
+        $('.user-dropdown-menu a').on('click', function() {
+            $userMenuContainer.removeClass('active');
         });
     }
 
