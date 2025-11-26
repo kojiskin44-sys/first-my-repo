@@ -224,6 +224,7 @@ function student_funding_project_details_callback($post) {
     $paypal_link = get_post_meta($post->ID, '_paypal_link', true);
     $bank_info = get_post_meta($post->ID, '_bank_info', true);
     $return_info = get_post_meta($post->ID, '_return_info', true);
+    $video_url = get_post_meta($post->ID, '_video_url', true);
     ?>
     <table class="form-table">
         <tr>
@@ -259,6 +260,13 @@ function student_funding_project_details_callback($post) {
             <td>
                 <textarea id="return_info" name="return_info" rows="5" class="large-text"><?php echo esc_textarea($return_info); ?></textarea>
                 <p class="description">リターン内容を記載（基本は辞退可能）</p>
+            </td>
+        </tr>
+        <tr>
+            <th><label for="video_url">プロジェクト動画URL</label></th>
+            <td>
+                <input type="url" id="video_url" name="video_url" value="<?php echo esc_url($video_url); ?>" class="regular-text">
+                <p class="description">YouTube、Vimeoなどの動画URLを入力してください（例: https://www.youtube.com/watch?v=xxxxx）</p>
             </td>
         </tr>
     </table>
@@ -386,6 +394,7 @@ function student_funding_save_meta($post_id) {
         'paypal_link',
         'bank_info',
         'return_info',
+        'video_url',
         'student_name',
         'student_school',
         'student_grade',
@@ -606,6 +615,29 @@ function student_funding_format_amount($amount) {
 function student_funding_is_project_ended($project_id) {
     $remaining_days = student_funding_get_remaining_days($project_id);
     return $remaining_days !== null && $remaining_days <= 0;
+}
+
+/**
+ * 動画URLを埋め込みHTMLに変換
+ */
+function student_funding_get_video_embed($url) {
+    if (empty($url)) {
+        return '';
+    }
+
+    // YouTube
+    if (preg_match('/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/', $url, $matches)) {
+        $video_id = $matches[1];
+        return '<div class="video-container"><iframe src="https://www.youtube.com/embed/' . esc_attr($video_id) . '" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>';
+    }
+
+    // Vimeo
+    if (preg_match('/vimeo\.com\/(\d+)/', $url, $matches)) {
+        $video_id = $matches[1];
+        return '<div class="video-container"><iframe src="https://player.vimeo.com/video/' . esc_attr($video_id) . '" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>';
+    }
+
+    return '';
 }
 
 // ===================================
@@ -905,3 +937,86 @@ function student_funding_toggle_favorite() {
     ));
 }
 add_action('wp_ajax_toggle_favorite', 'student_funding_toggle_favorite');
+
+/**
+ * フロントエンドからのプロジェクト作成
+ */
+function student_funding_create_project() {
+    check_ajax_referer('create_project', 'nonce');
+
+    if (!is_user_logged_in()) {
+        wp_send_json_error(array('message' => 'ログインが必要です。'));
+        return;
+    }
+
+    // バリデーション
+    $required_fields = array('project_title', 'project_category', 'project_content', 'goal_amount', 'deadline', 'student_name', 'student_school', 'student_grade');
+    foreach ($required_fields as $field) {
+        if (empty($_POST[$field])) {
+            wp_send_json_error(array('message' => '必須項目を入力してください。'));
+            return;
+        }
+    }
+
+    $goal_amount = intval($_POST['goal_amount']);
+    if ($goal_amount < 1000) {
+        wp_send_json_error(array('message' => '目標金額は1,000円以上を設定してください。'));
+        return;
+    }
+
+    // プロジェクト作成
+    $post_data = array(
+        'post_title'    => sanitize_text_field($_POST['project_title']),
+        'post_content'  => wp_kses_post($_POST['project_content']),
+        'post_status'   => 'pending', // 管理者の承認待ち
+        'post_type'     => 'project',
+        'post_author'   => get_current_user_id(),
+    );
+
+    $project_id = wp_insert_post($post_data);
+
+    if (is_wp_error($project_id)) {
+        wp_send_json_error(array('message' => 'プロジェクトの作成に失敗しました。'));
+        return;
+    }
+
+    // カテゴリー設定
+    wp_set_post_terms($project_id, array(intval($_POST['project_category'])), 'project_category');
+
+    // 画像アップロード
+    if (!empty($_FILES['project_image']['name'])) {
+        require_once(ABSPATH . 'wp-admin/includes/image.php');
+        require_once(ABSPATH . 'wp-admin/includes/file.php');
+        require_once(ABSPATH . 'wp-admin/includes/media.php');
+
+        $attachment_id = media_handle_upload('project_image', $project_id);
+        if (!is_wp_error($attachment_id)) {
+            set_post_thumbnail($project_id, $attachment_id);
+        }
+    }
+
+    // メタデータ保存
+    $meta_fields = array(
+        'goal_amount'    => intval($_POST['goal_amount']),
+        'deadline'       => sanitize_text_field($_POST['deadline']),
+        'student_name'   => sanitize_text_field($_POST['student_name']),
+        'student_school' => sanitize_text_field($_POST['student_school']),
+        'student_grade'  => sanitize_text_field($_POST['student_grade']),
+        'paypal_link'    => esc_url_raw($_POST['paypal_link']),
+        'bank_info'      => sanitize_textarea_field($_POST['bank_info']),
+        'return_info'    => sanitize_textarea_field($_POST['return_info']),
+        'video_url'      => esc_url_raw($_POST['video_url']),
+        'current_amount' => 0,
+        'supporter_count'=> 0,
+    );
+
+    foreach ($meta_fields as $key => $value) {
+        update_post_meta($project_id, '_' . $key, $value);
+    }
+
+    wp_send_json_success(array(
+        'message' => 'プロジェクトを作成しました。管理者の承認後に公開されます。',
+        'redirect' => home_url('/my-page/')
+    ));
+}
+add_action('wp_ajax_create_project', 'student_funding_create_project');

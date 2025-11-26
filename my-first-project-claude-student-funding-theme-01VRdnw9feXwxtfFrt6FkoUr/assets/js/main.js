@@ -39,6 +39,12 @@
 
         // お気に入りボタン
         initFavoriteButtons();
+
+        // アーカイブページのフィルター
+        initArchiveFilters();
+
+        // プロジェクト作成フォーム
+        initCreateProjectForm();
     });
 
     // ===================================
@@ -555,6 +561,104 @@
                 },
                 error: function() {
                     alert('エラーが発生しました。');
+                }
+            });
+        });
+    }
+
+    // ===================================
+    // 16. アーカイブページのフィルター
+    // ===================================
+
+    function initArchiveFilters() {
+        var $statusFilter = $('#status-filter');
+        var $sortFilter = $('#sort-filter');
+
+        // ステータスフィルターの変更時
+        $statusFilter.on('change', function() {
+            updateArchiveUrl('status', $(this).val());
+        });
+
+        // ソートフィルターの変更時
+        $sortFilter.on('change', function() {
+            updateArchiveUrl('orderby', $(this).val());
+        });
+
+        // URLを更新してページをリロード
+        function updateArchiveUrl(param, value) {
+            var url = new URL(window.location.href);
+
+            if (value) {
+                url.searchParams.set(param, value);
+            } else {
+                url.searchParams.delete(param);
+            }
+
+            // ページ番号をリセット
+            url.searchParams.delete('paged');
+
+            window.location.href = url.toString();
+        }
+    }
+
+    // ===================================
+    // 17. プロジェクト作成フォーム
+    // ===================================
+
+    function initCreateProjectForm() {
+        var $form = $('#create-project-form');
+        if ($form.length === 0) return;
+
+        var $errorDiv = $('#form-error');
+        var $submitButton = $form.find('button[type="submit"]');
+
+        // 画像プレビュー
+        $('#project_image').on('change', function(e) {
+            var file = e.target.files[0];
+            if (file) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    $('#image-preview').html('<img src="' + e.target.result + '" style="max-width: 300px; height: auto; border-radius: 8px;">');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // フォーム送信
+        $form.on('submit', function(e) {
+            e.preventDefault();
+
+            // エラーメッセージをクリア
+            $errorDiv.hide().html('');
+
+            // 送信ボタンを無効化
+            var originalText = $submitButton.text();
+            $submitButton.prop('disabled', true).text('作成中...');
+
+            // FormDataを使用（画像アップロードのため）
+            var formData = new FormData(this);
+            formData.append('action', 'create_project');
+            formData.append('nonce', $form.find('[name="create_project_nonce"]').val());
+
+            // AJAX送信
+            $.ajax({
+                url: studentFunding.ajaxurl,
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    if (response.success) {
+                        alert(response.data.message);
+                        window.location.href = response.data.redirect;
+                    } else {
+                        $errorDiv.html(response.data.message).show();
+                        $submitButton.prop('disabled', false).text(originalText);
+                    }
+                },
+                error: function() {
+                    $errorDiv.html('通信エラーが発生しました。').show();
+                    $submitButton.prop('disabled', false).text(originalText);
                 }
             });
         });

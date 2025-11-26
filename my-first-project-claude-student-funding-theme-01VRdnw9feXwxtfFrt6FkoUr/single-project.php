@@ -19,6 +19,7 @@ while (have_posts()) : the_post();
     $student_photo_id = get_post_meta(get_the_ID(), '_student_photo_id', true);
     $return_info = get_post_meta(get_the_ID(), '_return_info', true);
     $bank_info = get_post_meta(get_the_ID(), '_bank_info', true);
+    $video_url = get_post_meta(get_the_ID(), '_video_url', true);
 
     $achievement_rate = student_funding_get_achievement_rate(get_the_ID());
     $remaining_days = student_funding_get_remaining_days(get_the_ID());
@@ -89,6 +90,16 @@ while (have_posts()) : the_post();
                             <?php the_post_thumbnail('project-large'); ?>
                         </div>
                     <?php endif; ?>
+
+                    <!-- プロジェクト動画 -->
+                    <?php if ($video_url) :
+                        $video_embed = student_funding_get_video_embed($video_url);
+                        if ($video_embed) : ?>
+                            <div class="project-video-section">
+                                <?php echo $video_embed; ?>
+                            </div>
+                        <?php endif;
+                    endif; ?>
 
                     <!-- 進捗情報 -->
                     <div class="project-progress-section">

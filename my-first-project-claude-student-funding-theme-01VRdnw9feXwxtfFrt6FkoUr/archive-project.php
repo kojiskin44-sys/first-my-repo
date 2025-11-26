@@ -16,8 +16,37 @@ get_header();
             <p class="archive-description">学生たちの夢や挑戦を支援しよう</p>
         </header>
 
-        <!-- フィルター -->
+        <!-- 検索・フィルター -->
         <div class="archive-filters">
+            <!-- キーワード検索 -->
+            <form method="get" class="search-form" id="project-search-form">
+                <input type="text" name="s" placeholder="キーワードで検索..." value="<?php echo esc_attr(get_search_query()); ?>" class="search-input">
+                <button type="submit" class="btn btn-primary">検索</button>
+            </form>
+
+            <!-- ステータスフィルター -->
+            <div class="status-filter">
+                <label>ステータス:</label>
+                <select name="status_filter" id="status-filter" class="filter-select">
+                    <option value="">すべて</option>
+                    <option value="active" <?php echo isset($_GET['status']) && $_GET['status'] === 'active' ? 'selected' : ''; ?>>実施中</option>
+                    <option value="ending_soon" <?php echo isset($_GET['status']) && $_GET['status'] === 'ending_soon' ? 'selected' : ''; ?>>まもなく終了</option>
+                    <option value="ended" <?php echo isset($_GET['status']) && $_GET['status'] === 'ended' ? 'selected' : ''; ?>>終了</option>
+                </select>
+            </div>
+
+            <!-- ソート -->
+            <div class="sort-filter">
+                <label>並び替え:</label>
+                <select name="sort" id="sort-filter" class="filter-select">
+                    <option value="newest" <?php echo isset($_GET['orderby']) && $_GET['orderby'] === 'newest' ? 'selected' : ''; ?>>新着順</option>
+                    <option value="popular" <?php echo isset($_GET['orderby']) && $_GET['orderby'] === 'popular' ? 'selected' : ''; ?>>人気順</option>
+                    <option value="ending_soon" <?php echo isset($_GET['orderby']) && $_GET['orderby'] === 'ending_soon' ? 'selected' : ''; ?>>終了間近</option>
+                    <option value="achievement" <?php echo isset($_GET['orderby']) && $_GET['orderby'] === 'achievement' ? 'selected' : ''; ?>>達成率順</option>
+                </select>
+            </div>
+
+            <!-- カテゴリーフィルター -->
             <div class="filter-categories">
                 <?php
                 $current_term = get_queried_object();
@@ -46,15 +75,104 @@ get_header();
         <!-- プロジェクト一覧 -->
         <main class="archive-content">
             <?php
-            // プロジェクトが確実に取得されるように設定
-            global $wp_query;
-            if (!isset($wp_query->query_vars['post_type'])) {
-                $wp_query->query_vars['post_type'] = 'project';
+            // クエリパラメータの取得
+            $paged = (get_query_var('paged')) ? get_query_var('paged') : 1;
+            $orderby = isset($_GET['orderby']) ? sanitize_text_field($_GET['orderby']) : 'newest';
+            $status_filter = isset($_GET['status']) ? sanitize_text_field($_GET['status']) : '';
+            $search_query = get_search_query();
+
+            // クエリ引数の準備
+            $args = array(
+                'post_type'      => 'project',
+                'posts_per_page' => 12,
+                'paged'          => $paged,
+                'post_status'    => 'publish',
+            );
+
+            // 検索クエリ
+            if (!empty($search_query)) {
+                $args['s'] = $search_query;
             }
-            if (have_posts()) : ?>
+
+            // カテゴリーフィルター
+            if (is_tax('project_category')) {
+                $args['tax_query'] = array(
+                    array(
+                        'taxonomy' => 'project_category',
+                        'field'    => 'term_id',
+                        'terms'    => $current_term->term_id,
+                    ),
+                );
+            }
+
+            // ソート順の設定
+            switch ($orderby) {
+                case 'popular':
+                    $args['meta_key'] = '_current_amount';
+                    $args['orderby'] = 'meta_value_num';
+                    $args['order'] = 'DESC';
+                    break;
+                case 'achievement':
+                    $args['meta_key'] = '_current_amount';
+                    $args['orderby'] = 'meta_value_num';
+                    $args['order'] = 'DESC';
+                    break;
+                case 'ending_soon':
+                    $args['meta_key'] = '_deadline';
+                    $args['orderby'] = 'meta_value';
+                    $args['order'] = 'ASC';
+                    $args['meta_query'] = array(
+                        array(
+                            'key'     => '_deadline',
+                            'value'   => date('Y-m-d'),
+                            'compare' => '>=',
+                            'type'    => 'DATE',
+                        ),
+                    );
+                    break;
+                default: // newest
+                    $args['orderby'] = 'date';
+                    $args['order'] = 'DESC';
+                    break;
+            }
+
+            // ステータスフィルター
+            if ($status_filter === 'active') {
+                $args['meta_query'] = array(
+                    array(
+                        'key'     => '_deadline',
+                        'value'   => date('Y-m-d'),
+                        'compare' => '>=',
+                        'type'    => 'DATE',
+                    ),
+                );
+            } elseif ($status_filter === 'ending_soon') {
+                $end_date = date('Y-m-d', strtotime('+7 days'));
+                $args['meta_query'] = array(
+                    array(
+                        'key'     => '_deadline',
+                        'value'   => array(date('Y-m-d'), $end_date),
+                        'compare' => 'BETWEEN',
+                        'type'    => 'DATE',
+                    ),
+                );
+            } elseif ($status_filter === 'ended') {
+                $args['meta_query'] = array(
+                    array(
+                        'key'     => '_deadline',
+                        'value'   => date('Y-m-d'),
+                        'compare' => '<',
+                        'type'    => 'DATE',
+                    ),
+                );
+            }
+
+            $projects_query = new WP_Query($args);
+
+            if ($projects_query->have_posts()) : ?>
                 <div class="projects-grid">
                     <?php
-                    while (have_posts()) : the_post();
+                    while ($projects_query->have_posts()) : $projects_query->the_post();
                         // プロジェクト情報を取得
                         $goal_amount = get_post_meta(get_the_ID(), '_goal_amount', true);
                         $current_amount = get_post_meta(get_the_ID(), '_current_amount', true);
@@ -146,12 +264,17 @@ get_header();
                 <div class="pagination">
                     <?php
                     echo paginate_links(array(
+                        'total'     => $projects_query->max_num_pages,
+                        'current'   => $paged,
                         'prev_text' => '« 前へ',
                         'next_text' => '次へ »',
                         'mid_size'  => 2,
                     ));
                     ?>
                 </div>
+                <?php
+                wp_reset_postdata();
+                ?>
 
             <?php else : ?>
                 <div class="no-projects">
